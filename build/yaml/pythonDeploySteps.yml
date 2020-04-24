@@ -1,0 +1,56 @@
+steps:
+- task: AzureCLI@1
+  displayName: 'Create resource group and deploy bot'
+  inputs:
+    azureSubscription: $(AzureSubscription)
+    scriptLocation: inlineScript
+    inlineScript: |
+     az deployment create --name "$(BotName)-RG" --template-file "$(System.DefaultWorkingDirectory)/$(TemplateLocation)" --location "westus" --parameters appId="$(DeployAppId)" appSecret="$(DeployAppSecret)" botId="$(BotName)" botSku=F0 newAppServicePlanName="$(BotName)" newWebAppName="$(BotName)" groupName="$(BotName)-RG" groupLocation="westus" newAppServicePlanLocation="westus"
+
+- powershell: |
+    if(-Not ($null -eq $env:SDKVERSION)) {    
+        Write-Host "SdkVersion variable found. Set to $env:SDKVERSION"
+
+        $file = '$(System.DefaultWorkingDirectory)/$(Parameters.SourceLocation)/requirements.txt'
+
+        $content = Get-Content $file -Raw
+        $prepend = "--extra-index-url https://test.pypi.org/simple/" 
+
+        # Add the test.pypi source at the beginning of requirements if it doesn't exist
+        if($content -notlike "*$($prepend)*"){
+            $content = $prepend + "`n" + $content 
+        }
+
+        # Find and replace the 'botbuilder-integration-aiohttp' package version with the SDKVERSION environment variable.
+        # botbuilder-integration-aiohttp == <<SDKVERSION>>
+        # The Regex search for everything that starts with botbuilder-integration-aiohttp until the last space after the version number, 
+        # the 1st group ($0) is the full match, 2nd ($1) the conditional operator and the 3rd ($2) is the version number. 
+        # In this case, we concatenate the 2nd group with the SDKVERSION.
+        #
+        # Example groups:
+        #
+        # 1st => == 3.2.1 | <= 2.2.1 | != 1.2.1 
+        # 2nd => == | <= | != 
+        # 3rd => 3.2.1 | 2.2.1 | 1.2.1
+        #
+        $content = $content -replace '(?<=botbuilder-integration-aiohttp)(.*?)([0-9\.].*?)(?=\s)', (' $1 ' + $env:SDKVERSION)
+
+        Set-Content -Path $file -Value $content 
+
+        $content = Get-Content $file
+        Write-Host $content
+    }   
+  displayName: 'Set Sdk version value'
+  condition: ne(variables['SdkVersion'], '')
+     
+- script: |
+   mv $(System.DefaultWorkingDirectory)/$(Parameters.sourceLocation)/deployment-scripts/* $(System.DefaultWorkingDirectory)/$(Parameters.sourceLocation)
+   git config --global user.name "GitPythonDeploymentUser"
+   git config --global user.email GitPythonDeploymentUser@Pipeline.com
+   git init
+   git add .
+   git commit -m "cibuildtest"
+   git remote add azure https://$(AzureDeploymentUser):$(AzureDeploymentPassword)@$(BotName).scm.azurewebsites.net:443/$(BotName).git
+   git push azure master
+  workingDirectory: '$(System.DefaultWorkingDirectory)/$(Parameters.sourceLocation)'
+  displayName: 'Git bot deployment'
