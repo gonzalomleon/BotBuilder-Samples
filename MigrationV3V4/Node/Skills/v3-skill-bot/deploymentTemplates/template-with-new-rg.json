@@ -134,11 +134,11 @@
                                           "value": "10.14.1"
                                       },
                                       {
-                                          "name": "MicrosoftAppId",
+                                          "name": "MICROSOFT_APP_ID",
                                           "value": "[parameters('appId')]"
                                       },
                                       {
-                                          "name": "MicrosoftAppPassword",
+                                          "name": "MICROSOFT_APP_PASSWORD",
                                           "value": "[parameters('appSecret')]"
                                       }
                                   ],
